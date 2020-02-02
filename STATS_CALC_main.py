@@ -2,7 +2,7 @@ import json
 import os
 import logging
 import traceback
-from STATS_CALC_config import TOKEN, DIR, ADMIN_ID
+from STATS_CALC_config import TOKEN, DIR, ADMIN_ID, CHANNEL_ID
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
 from emoji import emojize
@@ -45,11 +45,6 @@ time = ''
 breachedCastleInfo = {}
 protectedCastleInfo = {}
 
-'''
-    if update.message.forward_from != None and update.message.forward_from.id == 924278817:
-        parseBattleStats(update, context, chat_id, message)
-'''
-
 # service
 
 def isAdmin(id):
@@ -90,6 +85,9 @@ def saveBattleStats(update, context):
     d['protected'] = []
     chat_id = update.effective_chat.id
     message = update.message.text
+    if update.message.forward_from == None or (update.message.forward_from != None and update.message.forward_from.id != 924278817):
+        context.bot.send_message(chat_id, 'Please forward me battle stats from @ChatWarsDigestsBot. To cancel type /cancel')
+        return BATTLE_STATS
     fullBattleStats = message.split('\n\n')
     day = fullBattleStats[0][2:4]
     month = fullBattleStats[0][5:7]
@@ -192,8 +190,10 @@ def chooseReportType(update, context):
         )
         return DEFENCE_REPORT
     else:
-        context.bot.send_message(chat_id, 'Wrong input. Try again /start.', reply_markup = ReplyKeyboardRemove())
-        return ConversationHandler.END
+        #context.bot.send_message(chat_id, 'Wrong input. Try again /start.', reply_markup = ReplyKeyboardRemove())
+        #return ConversationHandler.END
+        context.bot.send_message(chat_id, 'Wrong input. Please choose what stats you want to calculate? To cancel type /cancel')
+        return CHOOSE_REPORT_TYPE
 
 def getAttackReport(update, context):
     global breachedCastle
@@ -201,8 +201,10 @@ def getAttackReport(update, context):
     chat_id = update.effective_chat.id
     breachedCastle = update.message.text
     if not breachedCastle in tortuga+roza+amber+ferma+oplot+night+skala:
-        context.bot.send_message(chat_id, 'Worng input. Try again /start.', reply_markup = ReplyKeyboardRemove())
-        return ConversationHandler.END
+        #context.bot.send_message(chat_id, 'Worng input. Try again /start.', reply_markup = ReplyKeyboardRemove())
+        #return ConversationHandler.END
+        context.bot.send_message(chat_id, 'Worng input. Please choose a castle. To cancel type /cancel')
+        return ATTACK_REPORT
     else:
         try:
             with open(bs, 'r', encoding='utf-8') as json_file:
@@ -268,7 +270,7 @@ def calcAttack(update, context):
                     d['breached'][i]['damage'] = breachedCastleInfo[breachedCastle]['damage']
             with open(bs, 'w', encoding='utf-8') as file:
                 json.dump(d, file, indent=4, ensure_ascii=False)
-            context.bot.send_message(chat_id, breachedCastleInfo[breachedCastle]['damage'])
+            context.bot.send_message(chat_id, 'Attack: ' + str(breachedCastleInfo[breachedCastle]['damage']) + '. Data is saved.\nTo form a report type /report YYYY MM DD HH')
             return ConversationHandler.END
         elif message.find(' ') != -1 and len(message.split(' ')) == 2 and representsInt(message.split(' ')[0]) and representsInt(message.split(' ')[1]): 
             attack, goldReport = message.split(' ')
@@ -280,11 +282,11 @@ def calcAttack(update, context):
                     d['breached'][i]['damage'] = breachedCastleInfo[breachedCastle]['damage']
             with open(bs, 'w', encoding='utf-8') as file:
                 json.dump(d, file, indent=4, ensure_ascii=False)
-            context.bot.send_message(chat_id, breachedCastleInfo[breachedCastle]['damage'])
+            context.bot.send_message(chat_id, 'Attack: ' + str(breachedCastleInfo[breachedCastle]['damage']) + '. Data is saved.\nTo form a report type /report YYYY MM DD HH')
             return ConversationHandler.END
         else:
-            context.bot.send_message(chat_id, 'Wrong input. Try again /start.')
-            return ConversationHandler.END
+            context.bot.send_message(chat_id, 'Wrong input. Please send the attack report or just attack and gold from the report, e.g. 240 24. To cancel type /cancel')
+            return CALC_ATTACK
     except Exception:
         logging.error(traceback.format_exc())
 
@@ -294,8 +296,8 @@ def getDefenceReport(update, context):
     chat_id = update.effective_chat.id
     protectedCastle = update.message.text
     if not protectedCastle in tortuga+roza+amber+ferma+oplot+night+skala:
-        context.bot.send_message(chat_id, 'Worng input. Try again /start.', reply_markup = ReplyKeyboardRemove())
-        return ConversationHandler.END
+        context.bot.send_message(chat_id, 'Worng input. Please choose a castle. To cancel type /cancel')
+        return DEFENCE_REPORT
     else:
         try:
             with open(bs, 'r', encoding='utf-8') as json_file:
@@ -332,7 +334,7 @@ def calcDefence(update, context):
                     d['protected'][i]['protection'] = protectedCastleInfo[protectedCastle]['protection']
             with open(bs, 'w', encoding='utf-8') as file:
                 json.dump(d, file, indent=4, ensure_ascii=False)
-            context.bot.send_message(chat_id, protectedCastleInfo[protectedCastle]['protection'])
+            context.bot.send_message(chat_id, 'Defence: ' + str(protectedCastleInfo[protectedCastle]['protection']) + '. Data is saved.\nTo form a report type /report YYYY MM DD HH')
             return ConversationHandler.END
         elif message.find(' ') != -1 and len(message.split(' ')) == 2 and representsInt(message.split(' ')[0]) and representsInt(message.split(' ')[1]):
             defence, goldReport = message.split(' ')
@@ -344,11 +346,11 @@ def calcDefence(update, context):
                     d['protected'][i]['protection'] = protectedCastleInfo[protectedCastle]['protection']
             with open(bs, 'w', encoding='utf-8') as file:
                 json.dump(d, file, indent=4, ensure_ascii=False)
-            context.bot.send_message(chat_id, protectedCastleInfo[protectedCastle]['protection'])
+            context.bot.send_message(chat_id, 'Defence: ' + str(protectedCastleInfo[protectedCastle]['protection']) + '. Data is saved.\nTo form a report type /report YYYY MM DD HH')
             return ConversationHandler.END
         else:
-            context.bot.send_message(chat_id, 'Wrong input. Try again /start.')
-            return ConversationHandler.END
+            context.bot.send_message(chat_id, 'Wrong input. Please send the defence report or just defence and gold from the report, e.g. 350 14. To cancel type /cancel')
+            return CALC_DEFENCE
     except Exception:
         logging.error(traceback.format_exc())
 
@@ -387,7 +389,29 @@ def report(update, context):
         except Exception:
             logging.error(traceback.format_exc())
 
+def msg(update, context):
+    context.bot.send_message(update.effective_chat.id, '¯\\_(ツ)_/¯')
+    '''
+    if not update.message.reply_to_message is None:
+        replied_info = update.message.reply_to_message
+        context.bot.send_message(chat_id, str(replied_info))
+    '''
 
+def send(update, context):
+    chat_id = update.effective_chat.id
+    if not isAdmin(chat_id):
+        context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
+    elif update.message.reply_to_message is None:
+        context.bot.send_message(chat_id, 'You have to reply on the message to forward it.')
+    else:
+        replied_info = update.message.reply_to_message
+        try:
+            if 'Total dmg:' in replied_info.text:
+                context.bot.forward_message(CHANNEL_ID, chat_id, replied_info.message_id)
+            else:
+                context.bot.send_message(chat_id, 'It\'s not a summary.')
+        except Exception:
+            logging.error(traceback.format_exc())
 
 start_handler = CommandHandler('start', start)
 saveBattleStats_handler = MessageHandler(Filters.text, saveBattleStats)
@@ -421,12 +445,17 @@ dispatcher.add_handler(calcAttackTest_handler)
 report_handler = CommandHandler('report', report)
 dispatcher.add_handler(report_handler)
 
+send_handler = CommandHandler('send', send)
+dispatcher.add_handler(send_handler)
+
+msg_handler = MessageHandler(Filters.text, msg)
+dispatcher.add_handler(msg_handler)
+
 unknown_handler = MessageHandler(Filters.command, unknown)
 dispatcher.add_handler(unknown_handler)
 
 def main():
 	updater.start_polling()
-
     #updater.idle()
 
 if __name__ == '__main__':
