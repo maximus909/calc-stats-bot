@@ -71,7 +71,7 @@ def start(update, context):
         context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
         return ConversationHandler.END
     else:
-        context.bot.send_message(chat_id, 'Hello. I can calculate damage or defence for a certain batte.\nPlease forward me battle stats from @ChatWarsDigestsBot.')
+        context.bot.send_message(chat_id, 'Hello. I can calculate damage or defence for a certain battle.\nPlease forward me battle stats from @ChatWarsDigestsBot.')
     return BATTLE_STATS
 
 def saveBattleStats(update, context):
@@ -85,6 +85,11 @@ def saveBattleStats(update, context):
     d['protected'] = []
     chat_id = update.effective_chat.id
     message = update.message.text
+    username = update.effective_chat.username
+    if username is None:
+        suffix = chat_id
+    else:
+        suffix = username
     if update.message.forward_from == None or (update.message.forward_from != None and update.message.forward_from.id != 924278817):
         context.bot.send_message(chat_id, 'Please forward me battle stats from @ChatWarsDigestsBot. To cancel type /cancel')
         return BATTLE_STATS
@@ -101,7 +106,7 @@ def saveBattleStats(update, context):
     else:
         time = '???'
     dayTime = day + '.' + month + '.' + year + ' ' + time
-    bs = DIR + year + month + day + '_' + time[0:2] + '00_' + 'bs.json'
+    bs = DIR + year + month + day + '_' + time[0:2] + '00_' + 'bs_' + suffix + '.json'
 
     if 'breached' in fullBattleStats[1]:
         breachedCastles = fullBattleStats[2].splitlines()
@@ -362,6 +367,11 @@ def cancel(update, context):
 def report(update, context):
     chat_id = update.effective_chat.id
     message = update.message.text
+    username = update.effective_chat.username
+    if username is None:
+        suffix = chat_id
+    else:
+        suffix = username
     if not isAdmin(chat_id):
         context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
         return
@@ -370,7 +380,7 @@ def report(update, context):
             context.bot.send_message(chat_id, 'Invalid format. Type /report YYYY MM DD HH')
             return
         command, year, month, day, time = message.split(' ')
-        bs = DIR + year + month + day + '_' + time + '00_' + 'bs.json' 
+        bs = DIR + year + month + day + '_' + time + '00_' + 'bs_' + suffix + '.json' 
         try:
             with open(bs, 'r', encoding='utf-8') as json_file:
                 d = json.load(json_file)
