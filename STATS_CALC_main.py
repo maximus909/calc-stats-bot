@@ -2,7 +2,7 @@ import json
 import os
 import logging
 import traceback
-from STATS_CALC_config import TOKEN, DIR, ADMIN_ID, CHANNEL_ID
+from STATS_CALC_config import TOKEN, DIR, ADMIN_ID, SUPER_ADMIN_ID, CHANNEL_ID
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
 from emoji import emojize
@@ -48,10 +48,10 @@ protectedCastleInfo = {}
 # service
 
 def isAdmin(id):
-    if id in ADMIN_ID:
-        return True
-    else:
-        return False
+    return id in ADMIN_ID
+
+def isSuperAdmin(id):
+    return id in SUPER_ADMIN_ID
 
 def representsInt(s):
     try: 
@@ -409,7 +409,7 @@ def msg(update, context):
 
 def send(update, context):
     chat_id = update.effective_chat.id
-    if not isAdmin(chat_id):
+    if not isSuperAdmin(chat_id):
         context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
     elif update.message.reply_to_message is None:
         context.bot.send_message(chat_id, 'You have to reply on the message to forward it.')
