@@ -28,6 +28,7 @@ zp = emojize(':sunglasses:', use_aliases=True)
 ga = emojize(':trident:', use_aliases=True)
 lightning = emojize(':zap:', use_aliases=True)
 easydef = emojize(':ok_hand:', use_aliases=True)
+sleepingFace = emojize(':sleeping:', use_aliases=True)
 fire = emojize(':fire:', use_aliases=True)
 moneybag = emojize(':moneybag:', use_aliases=True)
 res = emojize(':package:', use_aliases=True)
@@ -71,7 +72,7 @@ def start(update, context):
         context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
         return ConversationHandler.END
     else:
-        context.bot.send_message(chat_id, 'Hello. I can calculate damage or defence for a certain battle.\nPlease forward me battle stats from @ChatWarsDigestsBot.')
+        context.bot.send_message(chat_id, 'Hello. I can calculate damage or defence for a certain battle.\nPlease forward me battle stats from @ChatWarsDigestsBot or type /use_prev to use previously submitted battle stats.')
     return BATTLE_STATS
 
 def saveBattleStats(update, context):
@@ -90,66 +91,133 @@ def saveBattleStats(update, context):
         suffix = chat_id
     else:
         suffix = username
-    if update.message.forward_from == None or (update.message.forward_from != None and update.message.forward_from.id != 924278817):
+    if message == '/cancel':
+        cancel(update, context)
+        return ConversationHandler.END
+    elif message == '/use_prev' and len(bs) != 0:
+        text = 'Following battle stats will be used:\n'
+        try:
+            with open(bs, 'r', encoding='utf-8') as json_file:
+                d = json.load(json_file)
+            for i in range(len(d['breached'])):
+                text = text + (d['breached'][i]['dayTime'] + '\n' if i == 0 else '') + d['breached'][i]['castle'] + ' <code>' + d['breached'][i]['points'] + '</code> ' + d['breached'][i]['breachType'] + ' ' + d['breached'][i]['gold'] + moneybag + '\n'
+            for i in range(len(d['protected'])):
+                text = text + d['protected'][i]['castle'] + ' <code>' + d['protected'][i]['points'] + '</code> ' + d['protected'][i]['breachType'] + ' ' + d['protected'][i]['gold'] + moneybag + '\n'
+            reply_keyboard = [[crossed_swords + 'Attack', shield + 'Defence']]
+            context.bot.send_message(
+                chat_id=chat_id, 
+                text= text + '\n' + 'Please choose what stats you want to calculate?', 
+                reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True, one_time_keyboard=True),
+                parse_mode='HTML')
+            return CHOOSE_REPORT_TYPE
+        except Exception:
+            logging.error(traceback.format_exc())
+    elif message == '/use_prev' and len(bs) == 0:
+        text = 'Following battle stats will be used:\n'
+        filesList = []
+        for subdir, dirs, files in os.walk(DIR):
+            for f in files:
+                if f.find(suffix) > 0:
+                    filesList.append(f)
+        lastFile = max(filesList)
+        try:
+            bs = DIR + lastFile
+            print(bs)
+            with open(bs, 'r', encoding='utf-8') as json_file:
+                d = json.load(json_file)
+            for i in range(len(d['breached'])):
+                text = text + (d['breached'][i]['dayTime'] + '\n' if i == 0 else '') + d['breached'][i]['castle'] + ' <code>' + d['breached'][i]['points'] + '</code> ' + d['breached'][i]['breachType'] + ' ' + d['breached'][i]['gold'] + moneybag + '\n'
+            for i in range(len(d['protected'])):
+                text = text + d['protected'][i]['castle'] + ' <code>' + d['protected'][i]['points'] + '</code> ' + d['protected'][i]['breachType'] + ' ' + d['protected'][i]['gold'] + moneybag + '\n'
+            reply_keyboard = [[crossed_swords + 'Attack', shield + 'Defence']]
+            context.bot.send_message(
+                chat_id=chat_id, 
+                text= text + '\n' + 'Please choose what stats you want to calculate?', 
+                reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True, one_time_keyboard=True),
+                parse_mode='HTML')
+            return CHOOSE_REPORT_TYPE
+        except Exception:
+            logging.error(traceback.format_exc())
+
+    elif update.message.forward_from == None or (update.message.forward_from != None and update.message.forward_from.id != 924278817):
         context.bot.send_message(chat_id, 'Please forward me battle stats from @ChatWarsDigestsBot. To cancel type /cancel')
         return BATTLE_STATS
-    fullBattleStats = message.split('\n\n')
-    day = fullBattleStats[0][2:4]
-    month = fullBattleStats[0][5:7]
-    year = '2020'
-    if fullBattleStats[0][0] == morning_time:
-        time = '09:00'
-    elif fullBattleStats[0][0] == day_time:
-        time = '17:00'
-    elif fullBattleStats[0][0] == night_time:
-        time = '01:00'
     else:
-        time = '???'
-    dayTime = day + '.' + month + '.' + year + ' ' + time
-    bs = DIR + year + month + day + '_' + time[0:2] + '00_' + 'bs_' + suffix + '.json'
+        fullBattleStats = message.split('\n\n')
+        day = fullBattleStats[0][2:4]
+        month = fullBattleStats[0][5:7]
+        year = '2020'
+        if fullBattleStats[0][0] == morning_time:
+            time = '09:00'
+        elif fullBattleStats[0][0] == day_time:
+            time = '17:00'
+        elif fullBattleStats[0][0] == night_time:
+            time = '01:00'
+        else:
+            time = '???'
+        dayTime = day + '.' + month + '.' + year + ' ' + time
+        bs = DIR + year + month + day + '_' + time[0:2] + '00_' + 'bs_' + suffix + '.json'
 
-    if 'breached' in fullBattleStats[1]:
-        breachedCastles = fullBattleStats[2].splitlines()
-        for i in range(len(breachedCastles)):
-            castle, points, breachType, gold = breachedCastles[i].split(' ')
-            gold = gold[:-1]
-            #d[castle] = {'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'damage':0}
-            d['breached'].append({'castle':castle, 'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'damage':0})
-    elif 'breached' in fullBattleStats[3]:
-        breachedCastles = fullBattleStats[4].splitlines()
-        for i in range(len(breachedCastles)):
-            castle, points, breachType, gold = breachedCastles[i].split(' ')
-            gold = gold[:-1]
-            d['breached'].append({'castle':castle, 'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'damage':0})
-    else:
-        print('???')
-    
-    if 'protected' in fullBattleStats[1]:
-        breachedCastles = fullBattleStats[2].splitlines()
-        for i in range(len(breachedCastles)):
-            castle, points, breachType, gold = breachedCastles[i].split(' ')
-            gold = gold[:-1]
-            #d[castle] = {'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'damage':0}
-            d['protected'].append({'castle':castle, 'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'protection':0})
-    elif 'protected' in fullBattleStats[3]:
-        breachedCastles = fullBattleStats[4].splitlines()
-        for i in range(len(breachedCastles)):
-            castle, points, breachType, gold = breachedCastles[i].split(' ')
-            gold = gold[:-1]
-            d['protected'].append({'castle':castle, 'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'protection':0})
-    else:
-        print('???')
+        if 'breached' in fullBattleStats[1]:
+            breachedCastles = fullBattleStats[2].splitlines()
+            try:
+                for i in range(len(breachedCastles)):
+                    if len(breachedCastles[i].split(' ')) == 3:
+                        gold = '0'
+                        castle, points, breachType = breachedCastles[i].split(' ')
+                    else:
+                        castle, points, breachType, gold = breachedCastles[i].split(' ')
+                        gold = gold[:-1]
+                    #d[castle] = {'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'damage':0}
+                    d['breached'].append({'castle':castle, 'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'damage':0})
+            except Exception:
+                logging.error(traceback.format_exc())
+        elif 'breached' in fullBattleStats[3]:
+            breachedCastles = fullBattleStats[4].splitlines()
+            for i in range(len(breachedCastles)):
+                if len(breachedCastles[i].split(' ')) == 3:
+                    gold = '0'
+                    castle, points, breachType = breachedCastles[i].split(' ')
+                else:
+                    castle, points, breachType, gold = breachedCastles[i].split(' ')
+                    gold = gold[:-1]
+                d['breached'].append({'castle':castle, 'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'damage':0})
+        else:
+            print('???')
+        
+        if 'protected' in fullBattleStats[1]:
+            breachedCastles = fullBattleStats[2].splitlines()
+            for i in range(len(breachedCastles)):
+                if len(breachedCastles[i].split(' ')) == 3:
+                    gold = '0'
+                    castle, points, breachType = breachedCastles[i].split(' ')
+                else:
+                    castle, points, breachType, gold = breachedCastles[i].split(' ')
+                    gold = gold[:-1]
+                d['protected'].append({'castle':castle, 'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'protection':0})
+        elif 'protected' in fullBattleStats[3]:
+            breachedCastles = fullBattleStats[4].splitlines()
+            for i in range(len(breachedCastles)):
+                if len(breachedCastles[i].split(' ')) == 3:
+                    gold = '0'
+                    castle, points, breachType = breachedCastles[i].split(' ')
+                else:
+                    castle, points, breachType, gold = breachedCastles[i].split(' ')
+                    gold = gold[:-1]
+                d['protected'].append({'castle':castle, 'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'protection':0})
+        else:
+            print('???')
 
-    if not os.path.isfile(bs):
-        with open(bs, 'w', encoding='utf-8') as file:
-            json.dump(d, file, indent=4, ensure_ascii=False)
+        if not os.path.isfile(bs):
+            with open(bs, 'w', encoding='utf-8') as file:
+                json.dump(d, file, indent=4, ensure_ascii=False)
 
-    reply_keyboard = [[crossed_swords + 'Attack', shield + 'Defence']]
-    context.bot.send_message(
-        chat_id=chat_id, 
-        text='Please choose what stats you want to calculate?', 
-        reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True, one_time_keyboard=True))
-    return CHOOSE_REPORT_TYPE
+        reply_keyboard = [[crossed_swords + 'Attack', shield + 'Defence']]
+        context.bot.send_message(
+            chat_id=chat_id, 
+            text='Please choose what stats you want to calculate?', 
+            reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True, one_time_keyboard=True))
+        return CHOOSE_REPORT_TYPE
 
 def chooseReportType(update, context):
     chat_id = update.effective_chat.id
@@ -217,7 +285,7 @@ def getAttackReport(update, context):
                 for i in range(len(d['breached'])):
                     if d['breached'][i]['castle'] == breachedCastle:
                         breachedCastleInfo[breachedCastle] = {'dayTime': d['breached'][i]['dayTime'], 'breachType': d['breached'][i]['breachType'], 'points': d['breached'][i]['points'], 'gold': d['breached'][i]['gold'], 'damage': d['breached'][i]['damage']}
-                print(breachedCastleInfo)
+                #print(breachedCastleInfo)
         except Exception:
             logging.error(traceback.format_exc())
 
@@ -310,7 +378,7 @@ def getDefenceReport(update, context):
                 for i in range(len(d['protected'])):
                     if d['protected'][i]['castle'] == protectedCastle:
                         protectedCastleInfo[protectedCastle] = {'dayTime': d['protected'][i]['dayTime'], 'breachType': d['protected'][i]['breachType'], 'points': d['protected'][i]['points'], 'gold': d['protected'][i]['gold'], 'protection': d['protected'][i]['protection']}
-                print(protectedCastleInfo)
+                #print(protectedCastleInfo)
         except Exception:
             logging.error(traceback.format_exc())
 
@@ -387,8 +455,8 @@ def report(update, context):
             text = day + '.' + month + '.' + year + ' ' + time +':00' + '\n'
             total_dmg = 0
             for i in range(len(d['protected'])):
-                if d['protected'][i]['breachType'] != easydef:
-                    text = text + d['protected'][i]['castle'] + ':' + d['protected'][i]['breachType'] + str(round(d['protected'][i]['protection']/1000,1)) + 'k\n'
+                if d['protected'][i]['breachType'] != easydef and d['protected'][i]['breachType'] != sleepingFace:
+                    text = text + d['protected'][i]['castle'] + ':' + d['protected'][i]['breachType'] + (shield if d['protected'][i]['breachType'] == ga else '') + str(round(d['protected'][i]['protection']/1000,1)) + 'k\n'
                     total_dmg = total_dmg + round(d['protected'][i]['protection']/1000,1)
             for i in range(len(d['breached'])):
                 text = text + d['breached'][i]['castle'] + ':' + d['breached'][i]['breachType'] + str(round(d['breached'][i]['damage']/1000,1)) + 'k\n'
@@ -424,7 +492,7 @@ def send(update, context):
             logging.error(traceback.format_exc())
 
 start_handler = CommandHandler('start', start)
-saveBattleStats_handler = MessageHandler(Filters.text, saveBattleStats)
+saveBattleStats_handler = MessageHandler(Filters.all, saveBattleStats)
 chooseReportType_handler = MessageHandler(Filters.text, chooseReportType)
 getAttackReport_handler = MessageHandler(Filters.text, getAttackReport)
 getDefenceReport_handler = MessageHandler(Filters.text, getDefenceReport)
