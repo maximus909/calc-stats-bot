@@ -10,6 +10,7 @@ from emoji import emojize
 updater = Updater(token=TOKEN, use_context = True)
 dispatcher = updater.dispatcher
 
+# set up emojis used in battle stats report
 morning_time = emojize(':full_moon_with_face:', use_aliases=True)
 day_time = emojize(':sun_with_face:', use_aliases=True)
 night_time = emojize(':new_moon_with_face:', use_aliases=True)
@@ -22,6 +23,7 @@ amber = emojize(':maple_leaf:', use_aliases=True)
 ferma = emojize(':eggplant:', use_aliases=True)
 tortuga = emojize(':turtle:', use_aliases=True)
 
+# emojis to parse battle stats, battle report; to form keyboard, reports etc 
 crossed_swords = emojize(':crossed_swords:', use_aliases=True)
 shield = emojize(':shield:', use_aliases=True)
 zp = emojize(':sunglasses:', use_aliases=True)
@@ -34,9 +36,11 @@ moneybag = emojize(':moneybag:', use_aliases=True)
 res = emojize(':package:', use_aliases=True)
 heart = emojize(':heart:', use_aliases=True)
 
+# 0 1 2 3 4 5 - for consecutive steps in Conversation handler
 BATTLE_STATS, CHOOSE_REPORT_TYPE, ATTACK_REPORT, DEFENCE_REPORT, CALC_ATTACK, CALC_DEFENCE = range(6)
 
-bs = ''
+# define global variables
+bs = '' # name of parsed & normalised battle stats
 breachedCastle = ''
 protectedCastle = ''
 day = ''
@@ -46,7 +50,7 @@ time = ''
 breachedCastleInfo = {}
 protectedCastleInfo = {}
 
-# service
+# service functions
 
 def isAdmin(id):
     return id in ADMIN_ID
@@ -61,29 +65,40 @@ def representsInt(s):
     except ValueError:
         return False
 
-# end service
+# end service functions
 
+# define function to handle unknown commande
 def unknown(update, context):
     context.bot.send_message(update.effective_chat.id, '¯\\_(ツ)_/¯')
 
+# define function to work with /start command
 def start(update, context):
     chat_id = update.effective_chat.id
     if not isAdmin(chat_id):
         context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
-        return ConversationHandler.END
+        return ConversationHandler.END # stop conversation
     else:
-        context.bot.send_message(chat_id, 'Hello. I can calculate damage or defence for a certain battle.\nPlease forward me battle stats from @ChatWarsDigestsBot or type /use_prev to use previously submitted battle stats.')
-    return BATTLE_STATS
+        context.bot.send_message(chat_id, 'Hello. I can calculate damage or defence for a certain battle.\nPlease forward me battle stats from @ChatWarsDigestsBot or type /use_prev to use previously submitted battle stats. To stop type /cancel.')
+    return BATTLE_STATS # next step to get battle stats
 
+def formPrevBattleStats(d):
+    text = 'Following battle stats will be used:\n'
+    for i in range(len(d['breached'])): # walk through breached castles and gather info
+        text = text + (d['breached'][i]['dayTime'] + '\n' if i == 0 else '') + d['breached'][i]['castle'] + ' <code>' + d['breached'][i]['points'] + '</code> ' + d['breached'][i]['breachType'] + ' ' + d['breached'][i]['gold'] + moneybag + '\n'
+    for i in range(len(d['protected'])): # walk through protected castles and gather info
+        text = text + d['protected'][i]['castle'] + ' <code>' + d['protected'][i]['points'] + '</code> ' + d['protected'][i]['breachType'] + ' ' + d['protected'][i]['gold'] + moneybag + '\n'
+    return text
+
+# save battle stats from CWDigestBot
 def saveBattleStats(update, context):
     global day
     global month
     global year
     global time
     global bs
-    d = {}
-    d['breached'] = []
-    d['protected'] = []
+    d = {} # define empty dict
+    d['breached'] = [] # define key 'breached' and value as empy list to store information about breached castle
+    d['protected'] = [] # define key 'protected' and value as empy list to store information about protected castle
     chat_id = update.effective_chat.id
     message = update.message.text
     username = update.effective_chat.username
@@ -94,15 +109,11 @@ def saveBattleStats(update, context):
     if message == '/cancel':
         cancel(update, context)
         return ConversationHandler.END
-    elif message == '/use_prev' and len(bs) != 0:
-        text = 'Following battle stats will be used:\n'
+    elif message == '/use_prev' and len(bs) != 0: # if user wants to use previous report. len(bs) checks if variable is already stores info about previously submitted report
         try:
             with open(bs, 'r', encoding='utf-8') as json_file:
-                d = json.load(json_file)
-            for i in range(len(d['breached'])):
-                text = text + (d['breached'][i]['dayTime'] + '\n' if i == 0 else '') + d['breached'][i]['castle'] + ' <code>' + d['breached'][i]['points'] + '</code> ' + d['breached'][i]['breachType'] + ' ' + d['breached'][i]['gold'] + moneybag + '\n'
-            for i in range(len(d['protected'])):
-                text = text + d['protected'][i]['castle'] + ' <code>' + d['protected'][i]['points'] + '</code> ' + d['protected'][i]['breachType'] + ' ' + d['protected'][i]['gold'] + moneybag + '\n'
+                d = json.load(json_file) # open .json file into dict d
+            text = formPrevBattleStats(d)
             reply_keyboard = [[crossed_swords + 'Attack', shield + 'Defence']]
             context.bot.send_message(
                 chat_id=chat_id, 
@@ -112,23 +123,19 @@ def saveBattleStats(update, context):
             return CHOOSE_REPORT_TYPE
         except Exception:
             logging.error(traceback.format_exc())
-    elif message == '/use_prev' and len(bs) == 0:
+    elif message == '/use_prev' and len(bs) == 0:  # if user wants to use previous report. len(bs) checks if variable is already stores info about previously submitted report
         text = 'Following battle stats will be used:\n'
         filesList = []
-        for subdir, dirs, files in os.walk(DIR):
-            for f in files:
-                if f.find(suffix) > 0:
+        for subdir, dirs, files in os.walk(DIR): # go through each and avery instanse in the DIR directory, where files are stored as lists for each directory
+            for f in files: # go through each file in files list
+                if f.find(suffix) > 0: # if we find username or user_id in filename then add it to the list
                     filesList.append(f)
-        lastFile = max(filesList)
+        lastFile = max(filesList) # get the latest file
         try:
-            bs = DIR + lastFile
-            print(bs)
+            bs = DIR + lastFile # set the full path & file name of the battle stats
             with open(bs, 'r', encoding='utf-8') as json_file:
                 d = json.load(json_file)
-            for i in range(len(d['breached'])):
-                text = text + (d['breached'][i]['dayTime'] + '\n' if i == 0 else '') + d['breached'][i]['castle'] + ' <code>' + d['breached'][i]['points'] + '</code> ' + d['breached'][i]['breachType'] + ' ' + d['breached'][i]['gold'] + moneybag + '\n'
-            for i in range(len(d['protected'])):
-                text = text + d['protected'][i]['castle'] + ' <code>' + d['protected'][i]['points'] + '</code> ' + d['protected'][i]['breachType'] + ' ' + d['protected'][i]['gold'] + moneybag + '\n'
+            text = formPrevBattleStats(d)
             reply_keyboard = [[crossed_swords + 'Attack', shield + 'Defence']]
             context.bot.send_message(
                 chat_id=chat_id, 
@@ -168,7 +175,6 @@ def saveBattleStats(update, context):
                     else:
                         castle, points, breachType, gold = breachedCastles[i].split(' ')
                         gold = gold[:-1]
-                    #d[castle] = {'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'damage':0}
                     d['breached'].append({'castle':castle, 'dayTime':dayTime, 'breachType':breachType, 'points':points, 'gold':gold, 'damage':0})
             except Exception:
                 logging.error(traceback.format_exc())
@@ -453,15 +459,17 @@ def report(update, context):
             with open(bs, 'r', encoding='utf-8') as json_file:
                 d = json.load(json_file)
             text = day + '.' + month + '.' + year + ' ' + time +':00' + '\n'
-            total_dmg = 0
+            ln = len(text)
+            total_atk = 0
+            total_def = 0
             for i in range(len(d['protected'])):
                 if d['protected'][i]['breachType'] != easydef and d['protected'][i]['breachType'] != sleepingFace:
                     text = text + d['protected'][i]['castle'] + ':' + d['protected'][i]['breachType'] + (shield if d['protected'][i]['breachType'] == ga else '') + str(round(d['protected'][i]['protection']/1000,1)) + 'k\n'
-                    total_dmg = total_dmg + round(d['protected'][i]['protection']/1000,1)
+                    total_def = total_def + round(d['protected'][i]['protection']/1000,1)
             for i in range(len(d['breached'])):
                 text = text + d['breached'][i]['castle'] + ':' + d['breached'][i]['breachType'] + str(round(d['breached'][i]['damage']/1000,1)) + 'k\n'
-                total_dmg = total_dmg + round(d['breached'][i]['damage']/1000,1)
-            text = text + 'Total dmg: ' + str(round(total_dmg,1)) + 'k'
+                total_atk = total_atk + round(d['breached'][i]['damage']/1000,1)
+            text = text + '-'*ln + '\n' + ('Total' + shield + ': ' + str(round(total_def,1)) + 'k\n' if total_def != 0 else '') + 'Total' + crossed_swords + ': ' + str(round(total_atk,1)) + 'k'
             #print(text)
             context.bot.send_message(chat_id, text)
         except Exception:
