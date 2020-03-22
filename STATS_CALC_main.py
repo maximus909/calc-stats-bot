@@ -36,6 +36,9 @@ moneybag = emojize(':moneybag:', use_aliases=True)
 res = emojize(':package:', use_aliases=True)
 heart = emojize(':heart:', use_aliases=True)
 
+# misc emojis
+black_small_square = emojize(':black_small_square:', use_aliases=True)
+
 # 0 1 2 3 4 5 - for consecutive steps in Conversation handler
 BATTLE_STATS, CHOOSE_REPORT_TYPE, ATTACK_REPORT, DEFENCE_REPORT, CALC_ATTACK, CALC_DEFENCE = range(6)
 
@@ -89,6 +92,22 @@ def formPrevBattleStats(d):
         text = text + d['protected'][i]['castle'] + ' <code>' + d['protected'][i]['points'] + '</code> ' + d['protected'][i]['breachType'] + ' ' + d['protected'][i]['gold'] + moneybag + '\n'
     return text
 
+def getLastBattleStatsDateTime(DIR, suffix):
+    filesList = []
+    for subdir, dirs, files in os.walk(DIR): # go through each and avery instanse in the DIR directory, where files are stored as lists for each directory
+        for f in files: # go through each file in files list
+            if f.find(suffix) > 0: # if we find username or user_id in filename then add it to the list
+                filesList.append(f)
+    return max(filesList) # get the latest file
+
+def getUserBattleStats(DIR, suffix):
+    filesList = []
+    for subdir, dirs, files in os.walk(DIR): # go through each and avery instanse in the DIR directory, where files are stored as lists for each directory
+        for f in files: # go through each file in files list
+            if f.find(suffix) > 0: # if we find username or user_id in filename then add it to the list
+                filesList.append(f)
+    return filesList # get the latest file    
+
 # save battle stats from CWDigestBot
 def saveBattleStats(update, context):
     global day
@@ -125,12 +144,15 @@ def saveBattleStats(update, context):
             logging.error(traceback.format_exc())
     elif message == '/use_prev' and len(bs) == 0:  # if user wants to use previous report. len(bs) checks if variable is already stores info about previously submitted report
         text = 'Following battle stats will be used:\n'
+        '''
         filesList = []
         for subdir, dirs, files in os.walk(DIR): # go through each and avery instanse in the DIR directory, where files are stored as lists for each directory
             for f in files: # go through each file in files list
                 if f.find(suffix) > 0: # if we find username or user_id in filename then add it to the list
                     filesList.append(f)
         lastFile = max(filesList) # get the latest file
+        '''
+        lastFile = getLastBattleStatsDateTime(DIR, suffix)
         try:
             bs = DIR + lastFile # set the full path & file name of the battle stats
             with open(bs, 'r', encoding='utf-8') as json_file:
@@ -450,11 +472,20 @@ def report(update, context):
         context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
         return
     else:
-        if message.find(' ') == -1:
+        if message == '/report':
+            lastFile = getLastBattleStatsDateTime(DIR, suffix)
+            bs = DIR + lastFile # set the full path & file name of the battle stats
+            #context.bot.send_message(chat_id, 'first condition')
+            year = lastFile[:4]
+            month = lastFile[4:6]
+            day = lastFile[6:8]
+            time = lastFile[9:11]
+        elif message.find(' ') == -1:
             context.bot.send_message(chat_id, 'Invalid format. Type /report YYYY MM DD HH')
             return
-        command, year, month, day, time = message.split(' ')
-        bs = DIR + year + month + day + '_' + time + '00_' + 'bs_' + suffix + '.json' 
+        else:
+            command, year, month, day, time = message.split(' ')
+            bs = DIR + year + month + day + '_' + time + '00_' + 'bs_' + suffix + '.json' 
         try:
             with open(bs, 'r', encoding='utf-8') as json_file:
                 d = json.load(json_file)
@@ -464,7 +495,7 @@ def report(update, context):
             total_def = 0
             for i in range(len(d['protected'])):
                 if d['protected'][i]['breachType'] != easydef and d['protected'][i]['breachType'] != sleepingFace:
-                    text = text + d['protected'][i]['castle'] + ':' + d['protected'][i]['breachType'] + (shield if d['protected'][i]['breachType'] == ga else '') + str(round(d['protected'][i]['protection']/1000,1)) + 'k\n'
+                    text = text + d['protected'][i]['castle'] + ':' + d['protected'][i]['breachType'] + (shield if d['protected'][i]['breachType'] == ga or d['protected'][i]['breachType'] == lightning else '') + str(round(d['protected'][i]['protection']/1000,1)) + 'k\n'
                     total_def = total_def + round(d['protected'][i]['protection']/1000,1)
             for i in range(len(d['breached'])):
                 text = text + d['breached'][i]['castle'] + ':' + d['breached'][i]['breachType'] + str(round(d['breached'][i]['damage']/1000,1)) + 'k\n'
@@ -474,6 +505,47 @@ def report(update, context):
             context.bot.send_message(chat_id, text)
         except Exception:
             logging.error(traceback.format_exc())
+
+def listBattleStats(update, context):
+    chat_id = update.effective_chat.id
+    message = update.message.text
+    username = update.effective_chat.username
+    if username is None:
+        suffix = chat_id
+    else:
+        suffix = username
+    if not isSuperAdmin(chat_id):
+        context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
+        return
+    else:
+        try:
+            if message == '/list':
+                listFiles = getUserBattleStats(DIR, suffix)
+            elif message == '/list all':
+                dc = {}
+                ls = getUserBattleStats(DIR, '_bs_')
+                for i in range(len(ls)):
+                    if ls[i][ls[i].find('bs_')+3:ls[i].find('.json')] not in dc: # check if user is in dict
+                        dc[ls[i][ls[i].find('bs_')+3:ls[i].find('.json')]] = 1
+                    else:
+                        dc[ls[i][ls[i].find('bs_')+3:ls[i].find('.json')]] += 1
+                text = 'List of users and number of submitted battle stats:\n'
+                for key in dc:
+                    text = text + black_small_square + key + ': <code>' + str(dc[key]) + '</code>\n'
+                context.bot.send_message(chat_id, text, parse_mode = 'HTML')
+                return
+            else:
+                command, suffix = message.split(' ')
+                listFiles = getUserBattleStats(DIR, suffix)
+            listFiles.sort()
+            nrBattleStats = len(listFiles)
+            text = 'The user <b>' + suffix + '</b> has <b>' + str(nrBattleStats) + '</b> reports. The last ' + str(min(3, len(listFiles))) + ' are:\n'
+            for i in range(min(3, len(listFiles))):
+                text = text + black_small_square + '<code>' + listFiles[-1-i][:4]+' '+listFiles[-1-i][4:6]+' '+listFiles[-1-i][6:8]+' '+listFiles[-1-i][9:11]+':00'+ '</code>\n'
+            context.bot.send_message(chat_id, text, parse_mode='HTML')
+        except Exception:
+            logging.error(traceback.format_exc())
+
 
 def msg(update, context):
     context.bot.send_message(update.effective_chat.id, '¯\\_(ツ)_/¯')
@@ -488,11 +560,11 @@ def send(update, context):
     if not isSuperAdmin(chat_id):
         context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
     elif update.message.reply_to_message is None:
-        context.bot.send_message(chat_id, 'You have to reply on the message to forward it.')
+        context.bot.send_message(chat_id, 'You have to reply on the message to send it to the channel.')
     else:
         replied_info = update.message.reply_to_message
         try:
-            if 'Total dmg:' in replied_info.text:
+            if 'Total' in replied_info.text: # ' + crossed_swords + ': '
                 context.bot.forward_message(CHANNEL_ID, chat_id, replied_info.message_id)
             else:
                 context.bot.send_message(chat_id, 'It\'s not a summary.')
@@ -530,6 +602,9 @@ dispatcher.add_handler(calcAttackTest_handler)
 '''
 report_handler = CommandHandler('report', report)
 dispatcher.add_handler(report_handler)
+
+list_handler = CommandHandler('list', listBattleStats)
+dispatcher.add_handler(list_handler)
 
 send_handler = CommandHandler('send', send)
 dispatcher.add_handler(send_handler)
