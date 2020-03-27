@@ -2,13 +2,51 @@ import json
 import os
 import logging
 import traceback
-from STATS_CALC_config import TOKEN, DIR, ADMIN_ID, SUPER_ADMIN_ID, CHANNEL_ID
+import re
+
+from STATS_CALC_config import TOKEN, DIR, CHANNEL_ID #, ADMIN_ID, SUPER_ADMIN_ID, OWNER_ID,
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
 from emoji import emojize
 
 updater = Updater(token=TOKEN, use_context = True)
 dispatcher = updater.dispatcher
+
+# load / update user, admin, owner lists
+def loadUsers():
+    with open(DIR + 'USER_ID.json', 'r') as fl:
+        USER_ID = json.load(fl)
+    return USER_ID
+
+def loadAdmins():
+    with open(DIR + 'ADMIN_ID.json', 'r') as fl:
+        ADMIN_ID = json.load(fl)
+    return ADMIN_ID
+
+def loadOwners():
+    with open(DIR + 'OWNER_ID.json', 'r') as fl:
+        OWNER_ID = json.load(fl)
+    return OWNER_ID
+
+def updateUsers(USER_ID):
+    with open(DIR + 'USER_ID.json', 'w') as fl:
+        json.dump(USER_ID, fl, indent=2)
+    return
+
+def updateAdmins(ADMIN_ID):
+    with open(DIR + 'ADMIN_ID.json', 'w') as fl:
+        json.dump(ADMIN_ID, fl, indent=2)
+    return
+
+def updateOwners(OWNER_ID):
+    with open(DIR + 'OWNER_ID.json', 'w') as fl:
+        json.dump(OWNER_ID, fl, indent=2)
+    return
+
+# initialize user list, admin list and owner list
+USER_ID = loadUsers()
+ADMIN_ID = loadAdmins()
+OWNER_ID = loadOwners()
 
 # set up emojis used in battle stats report
 morning_time = emojize(':full_moon_with_face:', use_aliases=True)
@@ -55,11 +93,14 @@ protectedCastleInfo = {}
 
 # service functions
 
+def isUser(id):
+    return id in USER_ID
+
 def isAdmin(id):
     return id in ADMIN_ID
 
-def isSuperAdmin(id):
-    return id in SUPER_ADMIN_ID
+def isOwner(id):
+    return id in OWNER_ID
 
 def representsInt(s):
     try: 
@@ -77,8 +118,8 @@ def unknown(update, context):
 # define function to work with /start command
 def start(update, context):
     chat_id = update.effective_chat.id
-    if not isAdmin(chat_id):
-        context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
+    if not isUser(chat_id):
+        context.bot.send_message(chat_id, 'You are not user. Please contact @magnusmax for an access.')
         return ConversationHandler.END # stop conversation
     else:
         context.bot.send_message(chat_id, 'Hello. I can calculate damage or defence for a certain battle.\nPlease forward me battle stats from @ChatWarsDigestsBot or type /use_prev to use previously submitted battle stats. To stop type /cancel.')
@@ -457,7 +498,7 @@ def calcDefence(update, context):
 
 def cancel(update, context):
     chat_id = update.effective_chat.id
-    context.bot.send_message(chat_id, 'To restart, press /start', reply_markup = ReplyKeyboardRemove())
+    context.bot.send_message(chat_id, 'To restart, press /start.', reply_markup = ReplyKeyboardRemove())
     return ConversationHandler.END
 
 def report(update, context):
@@ -468,8 +509,8 @@ def report(update, context):
         suffix = chat_id
     else:
         suffix = username
-    if not isAdmin(chat_id):
-        context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
+    if not isUser(chat_id):
+        context.bot.send_message(chat_id, 'You are not user. Please contact @magnusmax for an access.')
         return
     else:
         if message == '/report':
@@ -514,8 +555,8 @@ def listBattleStats(update, context):
         suffix = chat_id
     else:
         suffix = username
-    if not isSuperAdmin(chat_id):
-        context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
+    if not isOwner(chat_id):
+        context.bot.send_message(chat_id, 'You are not owner. Please contact @magnusmax for an access.')
         return
     else:
         try:
@@ -557,7 +598,7 @@ def msg(update, context):
 
 def send(update, context):
     chat_id = update.effective_chat.id
-    if not isSuperAdmin(chat_id):
+    if not isAdmin(chat_id):
         context.bot.send_message(chat_id, 'You are not admin. Please contact @magnusmax for an access.')
     elif update.message.reply_to_message is None:
         context.bot.send_message(chat_id, 'You have to reply on the message to send it to the channel.')
@@ -568,6 +609,101 @@ def send(update, context):
                 context.bot.forward_message(CHANNEL_ID, chat_id, replied_info.message_id)
             else:
                 context.bot.send_message(chat_id, 'It\'s not a summary.')
+        except Exception:
+            logging.error(traceback.format_exc())
+
+def addAdmin(update, context):
+    chat_id = update.effective_chat.id
+    message = update.message.text
+    if not isOwner(chat_id):
+        context.bot.send_message(chat_id, 'You are not owner. Please contact @magnusmax for an access.')
+        return
+    else:
+        try:
+            if len(re.findall(r'/add_admin\s\d+\s[0-2]', message)) != 1:
+                context.bot.send_message(chat_id, 'Bad format. Type command, id and user type separated by space, e.g. /add_admin 123 1. User types are:\n0 - user (can use the bot)\n1 - admin (can send report to the channel)\n2 - owner.')
+            else:
+                command, user_id, user_type = message.split(' ')
+                user_id = int(user_id)
+                if user_type == '0':
+                    if not user_id in USER_ID:
+                        USER_ID.append(user_id)
+                        updateUsers(USER_ID)
+                        context.bot.send_message(chat_id, 'User '+str(user_id)+' added.')
+                    else:
+                        context.bot.send_message(chat_id, 'User is already in the list.')
+                elif user_type == '1':
+                    if not user_id in ADMIN_ID:
+                        ADMIN_ID.append(user_id)
+                        updateAdmins(ADMIN_ID)
+                        context.bot.send_message(chat_id, 'Admin '+str(user_id)+' added.')
+                    else:
+                        context.bot.send_message(chat_id, 'Admin is already in the list.')
+                elif user_type == '2':
+                    if not user_id in OWNER_ID:
+                        OWNER_ID.append(user_id)
+                        updateOwners(OWNER_ID)
+                        context.bot.send_message(chat_id, 'Owner '+str(user_id)+' added.')
+                    else:
+                        context.bot.send_message(chat_id, 'Owner is already in the list.')
+        except Exception:
+            logging.error(traceback.format_exc())
+
+def removeAdmin(update, context):
+    chat_id = update.effective_chat.id
+    message = update.message.text
+    if not isOwner(chat_id):
+        context.bot.send_message(chat_id, 'You are not owner. Please contact @magnusmax for an access.')
+        return
+    else:
+        try:
+            if len(re.findall(r'/rm_admin\s\d+\s[0-2]', message)) != 1:
+                context.bot.send_message(chat_id, 'Bad format. Type command, id and user type separated by space, e.g. /rm_admin 123 1. User types are:\n0 - user (can use the bot)\n1 - admin (can send report to the channel)\n2 - owner.')
+            else:
+                command, user_id, user_type = message.split(' ')
+                user_id = int(user_id)
+                if user_type == '0':
+                    if user_id in USER_ID:
+                        USER_ID.remove(user_id)
+                        updateUsers(USER_ID)
+                        context.bot.send_message(chat_id, 'User '+str(user_id)+' removed.')
+                    else:
+                        context.bot.send_message(chat_id, 'User is not in the list.')
+                elif user_type == '1':
+                    if user_id in ADMIN_ID:
+                        ADMIN_ID.remove(user_id)
+                        updateAdmins(ADMIN_ID)
+                        context.bot.send_message(chat_id, 'Admin '+str(user_id)+' removed.')
+                    else:
+                        context.bot.send_message(chat_id, 'Admin is not in the list.')
+                elif user_type == '2':
+                    if user_id in OWNER_ID:
+                        OWNER_ID.remove(user_id)
+                        updateOwners(OWNER_ID)
+                        context.bot.send_message(chat_id, 'Owner '+str(user_id)+' removed.')
+                    else:
+                        context.bot.send_message(chat_id, 'Owner is not in the list.')
+        except Exception:
+            logging.error(traceback.format_exc())
+
+def showAdmin(update, context):
+    chat_id = update.effective_chat.id
+    message = update.message.text
+    if not isOwner(chat_id):
+        context.bot.send_message(chat_id, 'You are not owner. Please contact @magnusmax for an access.')
+        return
+    else:
+        try:
+            if len(re.findall(r'^/show_admin\s(user|admin|owner)$', message)) != 1:
+                context.bot.send_message(chat_id, 'Bad format. Type command /show_admin user|admin|owner.')
+            else:
+                command, user_type = message.split(' ')
+                if user_type == 'user':
+                    context.bot.send_message(chat_id, USER_ID)
+                if user_type == 'admin':
+                    context.bot.send_message(chat_id, ADMIN_ID)
+                if user_type == 'owner':
+                    context.bot.send_message(chat_id, OWNER_ID)
         except Exception:
             logging.error(traceback.format_exc())
 
@@ -608,6 +744,15 @@ dispatcher.add_handler(list_handler)
 
 send_handler = CommandHandler('send', send)
 dispatcher.add_handler(send_handler)
+
+add_admin_handler = CommandHandler('add_admin', addAdmin)
+dispatcher.add_handler(add_admin_handler)
+
+remove_admin_handler = CommandHandler('rm_admin', removeAdmin)
+dispatcher.add_handler(remove_admin_handler)
+
+show_admin_handler = CommandHandler('show_admin', showAdmin)
+dispatcher.add_handler(show_admin_handler)
 
 msg_handler = MessageHandler(Filters.text, msg)
 dispatcher.add_handler(msg_handler)
